@@ -62,7 +62,7 @@ The script rebuilds `data/processed/*.csv`, `docs/assets/comments.json`, and `do
 
 - `stock`: normalized stock or stock complex.
 - `fmp`: `BSAI`, `GOA`, or `BSAI/GOA`.
-- `comment_type`: rule-based category such as `request`, `recommendation`, `support/concur`, or `concern`.
+- `comment_type`: rule-based category such as `request`, `recommendation`, `support/concur`, or `concern`. The UI's comment type filter also includes ABC term flags from `abc_buffer_terms`: `maximum permissible`, `buffer`, `reduction`, and `from maxABC`.
 - `year`, `month`, `source_file`, `page`: source metadata.
 - `page_url`: UI-ready link to the PDF page.
 - `abc_buffer_terms`: matched terminology for ABC buffers or reductions from maximum permissible ABC.

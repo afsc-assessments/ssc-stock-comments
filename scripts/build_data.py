@@ -105,6 +105,14 @@ ABC_BUFFER_PATTERNS = {
 }
 
 
+COMMENT_TYPE_BUFFER_FILTERS = {
+    "maximum permissible": "maximum permissible ABC",
+    "buffer": "ABC buffer",
+    "reduction": "ABC reduction",
+    "from maxABC": "from maxABC",
+}
+
+
 def normalize_ws(text: str) -> str:
     text = re.sub(r"-\n\s*", "", text)
     text = re.sub(r"\s+", " ", text)
@@ -236,6 +244,22 @@ def abc_buffer_terms(para: str) -> str:
     return "; ".join(matches)
 
 
+def comment_type_filters(rows: list[dict[str, str | int]]) -> list[str]:
+    action_types = sorted({str(r["comment_type"]) for r in rows})
+    present_buffer_types = {
+        term
+        for row in rows
+        for term in str(row["abc_buffer_terms"]).split("; ")
+        if term
+    }
+    buffer_types = [
+        label
+        for label, buffer_term in COMMENT_TYPE_BUFFER_FILTERS.items()
+        if buffer_term in present_buffer_types
+    ]
+    return action_types + buffer_types
+
+
 def make_excerpt(para: str, max_len: int = 520) -> str:
     if len(para) <= max_len:
         return para
@@ -323,7 +347,7 @@ def main() -> None:
             "stocks": sorted({str(r["stock"]) for r in rows}),
             "years": sorted({str(r["year"]) for r in rows if r["year"]}),
             "fmps": ["BSAI", "GOA", "BSAI/GOA"],
-            "comment_types": sorted({str(r["comment_type"]) for r in rows}),
+            "comment_types": comment_type_filters(rows),
         },
     }
     payload_json = json.dumps(payload, ensure_ascii=False)

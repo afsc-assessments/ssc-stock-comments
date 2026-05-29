@@ -20,6 +20,13 @@ const els = {
   template: document.querySelector("#card-template"),
 };
 
+const bufferTypeLabels = {
+  "maximum permissible ABC": "maximum permissible",
+  "ABC buffer": "buffer",
+  "ABC reduction": "reduction",
+  "from maxABC": "from maxABC",
+};
+
 function selectedValues(select) {
   return Array.from(select.selectedOptions).map((option) => option.value);
 }
@@ -45,6 +52,17 @@ function recordText(record) {
   return `${record.stock} ${record.fmp} ${record.comment_type} ${record.section} ${record.abc_buffer_terms || ""} ${record.excerpt} ${record.full_text}`.toLowerCase();
 }
 
+function recordTypes(record) {
+  const bufferTerms = (record.abc_buffer_terms || "")
+    .split(";")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  const bufferLabels = bufferTerms
+    .map((term) => bufferTypeLabels[term])
+    .filter(Boolean);
+  return [record.comment_type, ...bufferTerms, ...bufferLabels];
+}
+
 function applyFilters() {
   const stocks = new Set(selectedValues(els.stock));
   const years = new Set(selectedValues(els.year));
@@ -57,7 +75,7 @@ function applyFilters() {
     if (stocks.size && !stocks.has(record.stock)) return false;
     if (years.size && !years.has(String(record.year))) return false;
     if (fmps.size && !fmps.has(record.fmp)) return false;
-    if (types.size && !types.has(record.comment_type)) return false;
+    if (types.size && !recordTypes(record).some((type) => types.has(type))) return false;
     if (bufferOnly && !record.abc_buffer_terms) return false;
     if (query && !recordText(record).includes(query)) return false;
     return true;
