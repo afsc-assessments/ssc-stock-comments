@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PDF_DIR = ROOT / "docs" / "pdfs"
 OUT = ROOT / "data" / "processed"
 WEB_ASSETS = ROOT / "docs" / "assets"
+MODEL_CHOICE_OVERRIDES = ROOT / "data" / "model_choice_overrides.csv"
 
 
 @dataclass(frozen=True)
@@ -103,6 +104,55 @@ ABC_BUFFER_PATTERNS = {
         re.I,
     ),
 }
+
+MODEL_CHOICE_RELATIONSHIPS = (
+    "different_from_both",
+    "different_from_plan_team",
+    "different_from_authors",
+    "agrees_with_both",
+    "agrees_with_plan_team",
+    "agrees_with_authors",
+    "unclear",
+)
+
+MODEL_LANGUAGE = re.compile(
+    r"\b(?:model(?:s|ing)?|alternative(?:s)?|configuration(?:s)?|base case|reference case)\b",
+    re.I,
+)
+MODEL_SELECTION_LANGUAGE = re.compile(
+    r"\b(?:select(?:s|ed|ion)?|cho(?:ose|oses|se|sen)|prefer(?:s|red|ence)?|"
+    r"recommend(?:s|ed|ation)?|adopt(?:s|ed|ion)?|accept(?:s|ed|ance)?|"
+    r"support(?:s|ed)?|agree(?:s|d)?|concur(?:s|red)?|disagree(?:s|d)?|"
+    r"instead|rather than|bring(?:ing)? forward|use|using)\b",
+    re.I,
+)
+PLAN_TEAM_LANGUAGE = re.compile(r"\b(?:Plan Team|[BG]PT|CPT|team)\b", re.I)
+AUTHOR_LANGUAGE = re.compile(r"\b(?:assessment )?author(?:s|'s|s')?\b", re.I)
+SSC_LANGUAGE = re.compile(r"\bSSC\b", re.I)
+CONTRAST_LANGUAGE = re.compile(
+    r"\b(?:disagree(?:s|d)?|did not agree|does not support|did not support|"
+    r"instead|rather than|different (?:model|alternative)|"
+    r"depart(?:s|ed|ure)? from)\b",
+    re.I,
+)
+AGREEMENT_LANGUAGE = re.compile(
+    r"\b(?:agree(?:s|d)? with|concur(?:s|red)? with|support(?:s|ed)?|"
+    r"endorse(?:s|d)?|recommend(?:s|ed)? (?:the )?(?:author|Plan Team|[BG]PT|CPT))\b",
+    re.I,
+)
+EXPLICIT_MODEL_DIFFERENCE = re.compile(
+    r"(?:"
+    r"\bSSC\b.{0,180}\b(?:disagree(?:s|d)? with|did not (?:agree with|support)|"
+    r"does not support)\b.{0,180}\b(?:Plan Team|[BG]PT|CPT|(?:assessment )?authors?)\b"
+    r".{0,180}\bmodel\b"
+    r"|"
+    r"\bSSC\b.{0,180}\b(?:select(?:s|ed)?|cho(?:ose|oses|se)|prefer(?:s|red)?|"
+    r"recommend(?:s|ed)?|adopt(?:s|ed)?)\b.{0,180}\bmodel\b.{0,180}"
+    r"\b(?:instead of|rather than)\b.{0,180}"
+    r"\b(?:Plan Team|[BG]PT|CPT|(?:assessment )?authors?)\b"
+    r")",
+    re.I,
+)
 
 
 COMMENT_TYPE_BUFFER_FILTERS = {
@@ -244,6 +294,138 @@ def abc_buffer_terms(para: str) -> str:
     return "; ".join(matches)
 
 
+def evidence_sentence(text: str) -> str:
+    """Return the shortest sentence that documents the model-choice relationship."""
+    sentences = re.split(r"(?<=[.!?])\s+", normalize_ws(text))
+    candidates = [
+        sentence
+        for sentence in sentences
+        if SSC_LANGUAGE.search(sentence)
+        and MODEL_LANGUAGE.search(sentence)
+        and (CONTRAST_LANGUAGE.search(sentence) or AGREEMENT_LANGUAGE.search(sentence))
+    ]
+    if not candidates:
+        candidates = [
+            sentence
+            for sentence in sentences
+            if MODEL_LANGUAGE.search(sentence)
+            and MODEL_SELECTION_LANGUAGE.search(sentence)
+            and (PLAN_TEAM_LANGUAGE.search(sentence) or AUTHOR_LANGUAGE.search(sentence))
+        ]
+    return min(candidates, key=len)[:700] if candidates else ""
+
+
+def model_choice_relationship(
+    para: str,
+    adjacent_text: str = "",
+) -> dict[str, str | bool]:
+    """Classify explicit SSC model-choice comparisons without inferring outcomes."""
+    base = normalize_ws(para)
+    result: dict[str, str | bool] = {
+        "model_choice_relationship": "",
+        "model_choice_flag": False,
+        "model_choice_confidence": "",
+        "model_choice_evidence": "",
+    }
+    if not (SSC_LANGUAGE.search(base) and MODEL_LANGUAGE.search(base)):
+        return result
+
+    sentences = re.split(r"(?<=[.!?])\s+", base)
+    explicit_sentences = [
+        sentence
+        for sentence in sentences
+        if SSC_LANGUAGE.search(sentence)
+        and MODEL_LANGUAGE.search(sentence)
+        and MODEL_SELECTION_LANGUAGE.search(sentence)
+        and (PLAN_TEAM_LANGUAGE.search(sentence) or AUTHOR_LANGUAGE.search(sentence))
+    ]
+    explicit_text = " ".join(explicit_sentences)
+    has_team = bool(PLAN_TEAM_LANGUAGE.search(explicit_text))
+    has_author = bool(AUTHOR_LANGUAGE.search(explicit_text))
+    has_selection = bool(MODEL_SELECTION_LANGUAGE.search(explicit_text))
+    has_contrast = bool(EXPLICIT_MODEL_DIFFERENCE.search(explicit_text))
+    has_agreement = bool(AGREEMENT_LANGUAGE.search(explicit_text))
+    evidence = evidence_sentence(base)
+
+    # A confirmed difference requires model language, a named comparison party,
+    # and contrast/selection language in the same extracted paragraph.
+    if has_selection and has_contrast and (has_team or has_author):
+        if has_team and has_author:
+            relationship = "different_from_both"
+        elif has_team:
+            relationship = "different_from_plan_team"
+        else:
+            relationship = "different_from_authors"
+        result.update(
+            {
+                "model_choice_relationship": relationship,
+                "model_choice_flag": True,
+                "model_choice_confidence": "high",
+                "model_choice_evidence": evidence or base[:700],
+            }
+        )
+        return result
+
+    if has_selection and has_agreement and (has_team or has_author):
+        if has_team and has_author:
+            relationship = "agrees_with_both"
+        elif has_team:
+            relationship = "agrees_with_plan_team"
+        else:
+            relationship = "agrees_with_authors"
+        result.update(
+            {
+                "model_choice_relationship": relationship,
+                "model_choice_confidence": "high",
+                "model_choice_evidence": evidence or base[:700],
+            }
+        )
+        return result
+
+    # Adjacent paragraphs are useful for finding candidates, but are not safe
+    # enough to assert that the SSC actually selected a different model.
+    window = normalize_ws(f"{adjacent_text} {base}")
+    if (
+        MODEL_LANGUAGE.search(window)
+        and MODEL_SELECTION_LANGUAGE.search(window)
+        and CONTRAST_LANGUAGE.search(window)
+        and (PLAN_TEAM_LANGUAGE.search(window) or AUTHOR_LANGUAGE.search(window))
+    ):
+        result.update(
+            {
+                "model_choice_relationship": "unclear",
+                "model_choice_confidence": "review",
+                "model_choice_evidence": evidence_sentence(window) or base[:700],
+            }
+        )
+    return result
+
+
+def load_model_choice_overrides() -> dict[tuple[str, int, int, str], dict[str, str | bool]]:
+    """Load human-reviewed classifications keyed to a source paragraph and stock."""
+    overrides: dict[tuple[str, int, int, str], dict[str, str | bool]] = {}
+    if not MODEL_CHOICE_OVERRIDES.exists():
+        return overrides
+    with MODEL_CHOICE_OVERRIDES.open(newline="", encoding="utf-8") as source:
+        for row in csv.DictReader(source):
+            relationship = row["model_choice_relationship"].strip()
+            if relationship not in MODEL_CHOICE_RELATIONSHIPS:
+                raise ValueError(f"Invalid model-choice relationship: {relationship}")
+            key = (
+                row["source_file"].strip(),
+                int(row["page"]),
+                int(row["paragraph_index"]),
+                row["stock"].strip(),
+            )
+            overrides[key] = {
+                "model_choice_relationship": relationship,
+                "model_choice_flag": relationship.startswith("different_from_"),
+                "model_choice_confidence": row["model_choice_confidence"].strip() or "high",
+                "model_choice_evidence": row["model_choice_evidence"].strip(),
+            }
+    return overrides
+
+
 def comment_type_filters(rows: list[dict[str, str | int]]) -> list[str]:
     action_types = sorted({str(r["comment_type"]) for r in rows})
     present_buffer_types = {
@@ -271,6 +453,7 @@ def main() -> None:
     WEB_ASSETS.mkdir(parents=True, exist_ok=True)
     rows: list[dict[str, str | int]] = []
     seen: set[tuple[str, str, str, int, str]] = set()
+    model_choice_overrides = load_model_choice_overrides()
 
     for pdf in sorted(PDF_DIR.glob("*.pdf")):
         pages, page_blocks = report_pages(pdf)
@@ -282,6 +465,11 @@ def main() -> None:
         for idx, block in enumerate(page_blocks, start=1):
             para = str(block["text"])
             page = int(block["page"])
+            adjacent = " ".join(
+                str(page_blocks[neighbor]["text"])
+                for neighbor in (idx - 2, idx)
+                if 0 <= neighbor < len(page_blocks)
+            )
             context = update_context(para, context)
             section = section_label(para, section)
             matches = stock_matches(para)
@@ -289,10 +477,13 @@ def main() -> None:
                 continue
             ctype = comment_type(para)
             buffer_terms = abc_buffer_terms(para)
+            model_choice = model_choice_relationship(para, adjacent)
             if ctype == "context" and "SSC" not in para and not re.search(r"\b(assessment|SAFE|OFL|ABC|model|risk table|harvest)\b", para, re.I):
                 continue
             for stock, aliases in matches:
                 fmp = infer_fmp(stock, para, context)
+                override_key = (pdf.name, page, idx, stock.stock)
+                stock_model_choice = model_choice_overrides.get(override_key, model_choice)
                 key = (pdf.name, stock.stock, fmp, page, para[:180])
                 if key in seen:
                     continue
@@ -311,6 +502,7 @@ def main() -> None:
                         "section": section,
                         "matched_terms": aliases,
                         "abc_buffer_terms": buffer_terms,
+                        **stock_model_choice,
                         "excerpt": make_excerpt(para),
                         "full_text": para,
                         "pdf_url": pdf_url,
@@ -331,6 +523,10 @@ def main() -> None:
         "section",
         "matched_terms",
         "abc_buffer_terms",
+        "model_choice_relationship",
+        "model_choice_flag",
+        "model_choice_confidence",
+        "model_choice_evidence",
         "excerpt",
         "full_text",
         "pdf_url",
@@ -348,6 +544,11 @@ def main() -> None:
             "years": sorted({str(r["year"]) for r in rows if r["year"]}),
             "fmps": ["BSAI", "GOA", "BSAI/GOA"],
             "comment_types": comment_type_filters(rows),
+            "model_choice_relationships": [
+                relationship
+                for relationship in MODEL_CHOICE_RELATIONSHIPS
+                if any(r["model_choice_relationship"] == relationship for r in rows)
+            ],
         },
     }
     payload_json = json.dumps(payload, ensure_ascii=False)

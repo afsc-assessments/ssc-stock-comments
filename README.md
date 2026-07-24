@@ -66,7 +66,18 @@ The script rebuilds `data/processed/*.csv`, `docs/assets/comments.json`, and `do
 - `year`, `month`, `source_file`, `page`: source metadata.
 - `page_url`: UI-ready link to the PDF page.
 - `abc_buffer_terms`: matched terminology for ABC buffers or reductions from maximum permissible ABC.
+- `model_choice_relationship`: SSC agreement or disagreement with the assessment
+  authors and/or Plan Team on model selection. Ambiguous candidates are `unclear`.
+- `model_choice_flag`: `true` only when the text explicitly indicates that the SSC
+  selected a different model.
+- `model_choice_confidence`: `high` for explicit same-paragraph classifications or
+  `review` when surrounding text suggests a comparison that requires verification.
+- `model_choice_evidence`: the source sentence supporting the classification.
 - `excerpt`: card-friendly text.
 - `full_text`: full source paragraph.
 
 The extraction is intentionally auditable. Broad ecosystem paragraphs may match multiple stocks when they discuss several species; use `matched_terms`, `section`, `source_file`, and `page` during curation.
+
+Human-reviewed model-choice classifications can be added to
+`data/model_choice_overrides.csv`. Overrides are keyed by source file, page,
+paragraph index, and stock, and are applied whenever the data are rebuilt.

@@ -205,6 +205,16 @@ a:hover {
   color: #416c25;
 }
 
+.model-choice-topic {
+  background: #fde8e7;
+  color: #9b2924;
+}
+
+.model-choice-topic.review {
+  background: #fff4d6;
+  color: #795713;
+}
+
 .excerpt,
 .full-text {
   margin: 12px 0;

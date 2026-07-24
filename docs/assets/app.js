@@ -10,6 +10,8 @@ const els = {
   fmp: document.querySelector("#fmp-filter"),
   type: document.querySelector("#type-filter"),
   buffer: document.querySelector("#buffer-filter"),
+  modelChoice: document.querySelector("#model-choice-filter"),
+  modelReview: document.querySelector("#model-review-filter"),
   search: document.querySelector("#search-filter"),
   sort: document.querySelector("#sort-order"),
   cards: document.querySelector("#cards"),
@@ -49,7 +51,7 @@ function setSelected(select, values) {
 }
 
 function recordText(record) {
-  return `${record.stock} ${record.fmp} ${record.comment_type} ${record.section} ${record.abc_buffer_terms || ""} ${record.excerpt} ${record.full_text}`.toLowerCase();
+  return `${record.stock} ${record.fmp} ${record.comment_type} ${record.section} ${record.abc_buffer_terms || ""} ${record.model_choice_relationship || ""} ${record.model_choice_evidence || ""} ${record.excerpt} ${record.full_text}`.toLowerCase();
 }
 
 function recordTypes(record) {
@@ -69,6 +71,8 @@ function applyFilters() {
   const fmps = new Set(selectedValues(els.fmp));
   const types = new Set(selectedValues(els.type));
   const bufferOnly = els.buffer.checked;
+  const differentModelOnly = els.modelChoice.checked;
+  const modelReviewOnly = els.modelReview.checked;
   const query = els.search.value.trim().toLowerCase();
 
   state.filtered = state.records.filter((record) => {
@@ -77,6 +81,8 @@ function applyFilters() {
     if (fmps.size && !fmps.has(record.fmp)) return false;
     if (types.size && !recordTypes(record).some((type) => types.has(type))) return false;
     if (bufferOnly && !record.abc_buffer_terms) return false;
+    if (differentModelOnly && !record.model_choice_flag) return false;
+    if (modelReviewOnly && record.model_choice_confidence !== "review") return false;
     if (query && !recordText(record).includes(query)) return false;
     return true;
   });
@@ -110,6 +116,17 @@ function render() {
       bufferTopic.hidden = false;
       bufferTopic.textContent = "ABC buffer";
       bufferTopic.title = record.abc_buffer_terms;
+    }
+    const modelChoiceTopic = node.querySelector(".model-choice-topic");
+    if (record.model_choice_flag) {
+      modelChoiceTopic.hidden = false;
+      modelChoiceTopic.textContent = "Different model";
+      modelChoiceTopic.title = `${record.model_choice_relationship}: ${record.model_choice_evidence || ""}`;
+    } else if (record.model_choice_confidence === "review") {
+      modelChoiceTopic.hidden = false;
+      modelChoiceTopic.textContent = "Model choice: review";
+      modelChoiceTopic.classList.add("review");
+      modelChoiceTopic.title = record.model_choice_evidence || "Review source paragraph";
     }
     node.querySelector(".excerpt").textContent = record.excerpt;
     node.querySelector(".full-text").textContent = record.full_text;
@@ -147,6 +164,8 @@ function writeUrlState() {
   });
   if (els.search.value.trim()) params.set("q", els.search.value.trim());
   if (els.buffer.checked) params.set("abc_buffer", "1");
+  if (els.modelChoice.checked) params.set("different_model", "1");
+  if (els.modelReview.checked) params.set("model_review", "1");
   const next = `${location.pathname}${params.toString() ? `?${params}` : ""}`;
   history.replaceState(null, "", next);
 }
@@ -158,6 +177,8 @@ function readUrlState() {
   setSelected(els.fmp, (params.get("fmp") || "").split("|").filter(Boolean));
   setSelected(els.type, (params.get("type") || "").split("|").filter(Boolean));
   els.buffer.checked = params.get("abc_buffer") === "1";
+  els.modelChoice.checked = params.get("different_model") === "1";
+  els.modelReview.checked = params.get("model_review") === "1";
   els.search.value = params.get("q") || "";
 }
 
@@ -168,6 +189,8 @@ function clearFilters() {
     });
   });
   els.buffer.checked = false;
+  els.modelChoice.checked = false;
+  els.modelReview.checked = false;
   els.search.value = "";
   state.pageSize = 80;
   applyFilters();
@@ -198,7 +221,7 @@ async function init() {
   applyFilters();
 }
 
-[els.stock, els.year, els.fmp, els.type, els.buffer, els.sort].forEach((el) => {
+[els.stock, els.year, els.fmp, els.type, els.buffer, els.modelChoice, els.modelReview, els.sort].forEach((el) => {
   el.addEventListener("change", () => {
     state.pageSize = 80;
     applyFilters();
