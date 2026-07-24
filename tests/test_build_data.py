@@ -42,7 +42,7 @@ class ModelChoiceRelationshipTests(unittest.TestCase):
         result = model_choice_relationship(text, adjacent)
         self.assertEqual(result["model_choice_relationship"], "unclear")
         self.assertEqual(result["model_choice_confidence"], "review")
-        self.assertFalse(result["model_choice_flag"])
+        self.assertTrue(result["model_choice_flag"])
 
     def test_irrelevant_comment_has_no_classification(self):
         result = model_choice_relationship("The SSC recommends additional survey work.")

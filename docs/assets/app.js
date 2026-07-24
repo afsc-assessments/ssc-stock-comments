@@ -118,15 +118,15 @@ function render() {
       bufferTopic.title = record.abc_buffer_terms;
     }
     const modelChoiceTopic = node.querySelector(".model-choice-topic");
-    if (record.model_choice_flag) {
+    if (record.model_choice_confidence === "review") {
+      modelChoiceTopic.hidden = false;
+      modelChoiceTopic.textContent = "Different model: review";
+      modelChoiceTopic.classList.add("review");
+      modelChoiceTopic.title = record.model_choice_evidence || "Review source paragraph";
+    } else if (record.model_choice_flag) {
       modelChoiceTopic.hidden = false;
       modelChoiceTopic.textContent = "Different model";
       modelChoiceTopic.title = `${record.model_choice_relationship}: ${record.model_choice_evidence || ""}`;
-    } else if (record.model_choice_confidence === "review") {
-      modelChoiceTopic.hidden = false;
-      modelChoiceTopic.textContent = "Model choice: review";
-      modelChoiceTopic.classList.add("review");
-      modelChoiceTopic.title = record.model_choice_evidence || "Review source paragraph";
     }
     node.querySelector(".excerpt").textContent = record.excerpt;
     node.querySelector(".full-text").textContent = record.full_text;

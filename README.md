@@ -68,8 +68,8 @@ The script rebuilds `data/processed/*.csv`, `docs/assets/comments.json`, and `do
 - `abc_buffer_terms`: matched terminology for ABC buffers or reductions from maximum permissible ABC.
 - `model_choice_relationship`: SSC agreement or disagreement with the assessment
   authors and/or Plan Team on model selection. Ambiguous candidates are `unclear`.
-- `model_choice_flag`: `true` only when the text explicitly indicates that the SSC
-  selected a different model.
+- `model_choice_flag`: `true` for explicit different-model cases and candidates
+  marked for review.
 - `model_choice_confidence`: `high` for explicit same-paragraph classifications or
   `review` when surrounding text suggests a comparison that requires verification.
 - `model_choice_evidence`: the source sentence supporting the classification.

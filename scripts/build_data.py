@@ -385,15 +385,23 @@ def model_choice_relationship(
     # Adjacent paragraphs are useful for finding candidates, but are not safe
     # enough to assert that the SSC actually selected a different model.
     window = normalize_ws(f"{adjacent_text} {base}")
+    review_sentences = re.split(r"(?<=[.!?])\s+", window)
+    has_review_comparison = any(
+        MODEL_LANGUAGE.search(sentence)
+        and MODEL_SELECTION_LANGUAGE.search(sentence)
+        and CONTRAST_LANGUAGE.search(sentence)
+        and (PLAN_TEAM_LANGUAGE.search(sentence) or AUTHOR_LANGUAGE.search(sentence))
+        for sentence in review_sentences
+    )
     if (
-        MODEL_LANGUAGE.search(window)
-        and MODEL_SELECTION_LANGUAGE.search(window)
-        and CONTRAST_LANGUAGE.search(window)
+        SSC_LANGUAGE.search(window)
+        and has_review_comparison
         and (PLAN_TEAM_LANGUAGE.search(window) or AUTHOR_LANGUAGE.search(window))
     ):
         result.update(
             {
                 "model_choice_relationship": "unclear",
+                "model_choice_flag": True,
                 "model_choice_confidence": "review",
                 "model_choice_evidence": evidence_sentence(window) or base[:700],
             }
@@ -419,7 +427,10 @@ def load_model_choice_overrides() -> dict[tuple[str, int, int, str], dict[str, s
             )
             overrides[key] = {
                 "model_choice_relationship": relationship,
-                "model_choice_flag": relationship.startswith("different_from_"),
+                "model_choice_flag": (
+                    relationship.startswith("different_from_")
+                    or row["model_choice_confidence"].strip() == "review"
+                ),
                 "model_choice_confidence": row["model_choice_confidence"].strip() or "high",
                 "model_choice_evidence": row["model_choice_evidence"].strip(),
             }
