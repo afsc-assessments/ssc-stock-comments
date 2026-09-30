@@ -1,6 +1,26 @@
 import unittest
 
-from scripts.build_data import model_choice_relationship
+from scripts.build_data import model_choice_relationship, stock_matches
+
+
+class StockScopeTests(unittest.TestCase):
+    def test_goa_tanner_section_is_separate_from_ebs(self):
+        matches = {stock.stock for stock, _ in stock_matches(
+            "The SSC recommends reviewing Tanner crab closures.", "C5 GOA Tanner Crab Protection Measures")}
+        self.assertIn("GOA Tanner crab (bycatch)", matches)
+        self.assertNotIn("EBS Tanner crab", matches)
+
+    def test_explicit_ebs_comparison_remains_searchable(self):
+        matches = {stock.stock for stock, _ in stock_matches(
+            "The SSC compares GOA Tanner crab with EBS Tanner crab.")}
+        self.assertIn("EBS Tanner crab", matches)
+        self.assertIn("GOA Tanner crab (bycatch)", matches)
+
+    def test_pribilof_golden_crab_is_separate_from_aleutians(self):
+        matches = {stock.stock for stock, _ in stock_matches(
+            "The SSC thanks the authors of the Pribilof Islands golden king crab assessment.")}
+        self.assertIn("Pribilof Islands golden king crab", matches)
+        self.assertNotIn("Aleutian Islands golden king crab", matches)
 
 
 class ModelChoiceRelationshipTests(unittest.TestCase):

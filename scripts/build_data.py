@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import re
 import subprocess
@@ -18,6 +19,10 @@ PDF_DIR = ROOT / "docs" / "pdfs"
 OUT = ROOT / "data" / "processed"
 WEB_ASSETS = ROOT / "docs" / "assets"
 MODEL_CHOICE_OVERRIDES = ROOT / "data" / "model_choice_overrides.csv"
+EXCLUDED_FILES = {
+    "SSC Dec 2024x.pdf": "Excluded at user request; duplicate December 2024 edition",
+    "SSC_DRAFT_Sept16_Minutes_NOV2016BB.pdf": "Pacific Fishery Management Council, outside NPFMC scope",
+}
 
 
 @dataclass(frozen=True)
@@ -61,11 +66,13 @@ STOCKS: tuple[Stock, ...] = (
     Stock("EBS snow crab", "BSAI", ("snow crab", "EBS snow crab")),
     Stock("Bristol Bay red king crab", "BSAI", ("Bristol Bay red king crab", "BB red king crab")),
     Stock("EBS Tanner crab", "BSAI", ("Tanner crab", "EBS Tanner crab")),
+    Stock("GOA Tanner crab (bycatch)", "GOA", ("GOA Tanner crab", "Gulf of Alaska Tanner crab")),
     Stock("Pribilof Islands red king crab", "BSAI", ("Pribilof Islands red king crab",)),
     Stock("Pribilof Islands blue king crab", "BSAI", ("Pribilof Islands blue king crab",)),
     Stock("St. Matthew Island blue king crab", "BSAI", ("St. Matthew", "St Matthew", "blue king crab")),
     Stock("Norton Sound red king crab", "BSAI", ("Norton Sound red king crab", "NSRKC")),
     Stock("Aleutian Islands golden king crab", "BSAI", ("golden king crab", "AI golden king crab")),
+    Stock("Pribilof Islands golden king crab", "BSAI", ("Pribilof Islands golden king crab", "Pribilof Island golden king crab", "PIGKC")),
     Stock("Western Aleutian Islands red king crab", "BSAI", ("Western AI red king crab", "Western Aleutian Islands red king crab")),
     Stock("Scallops", "BSAI/GOA", ("scallop", "scallops")),
     Stock("Salmon", "BSAI/GOA", ("salmon", "chum salmon", "Chinook salmon", "pink salmon", "sockeye salmon")),
@@ -187,6 +194,12 @@ def clean_lines(text: str) -> list[str]:
 
 
 def extract_pages(pdf: Path) -> list[str]:
+    sidecar = ROOT / "data" / "ocr" / f"{pdf.name}.json"
+    if sidecar.exists():
+        saved = json.loads(sidecar.read_text())
+        if saved["pdf_sha256"] != hashlib.sha256(pdf.read_bytes()).hexdigest():
+            raise ValueError(f"OCR source hash changed: {pdf.name}")
+        return saved["pages"]
     proc = subprocess.run(
         ["pdftotext", "-layout", str(pdf), "-"],
         check=True,
@@ -195,7 +208,8 @@ def extract_pages(pdf: Path) -> list[str]:
         errors="replace",
     )
     pages = proc.stdout.split("\f")
-    return [page for page in pages if page.strip()]
+    # Poppler emits a final separator; blank physical pages still count in PDF links.
+    return pages[:-1] if pages and not pages[-1].strip() else pages
 
 
 def report_pages(pdf: Path) -> tuple[list[str], list[dict[str, str | int]]]:
@@ -224,9 +238,10 @@ def paragraphs_by_page(pages: list[str]) -> list[dict[str, str | int]]:
 
 def report_date(name: str, text: str) -> tuple[str, str]:
     year_match = re.search(r"(20\d{2}|19\d{2})", name) or re.search(r"\b(20\d{2}|19\d{2})\b", text[:2000])
-    month_match = re.search(r"\b(Dec|December|Oct|October|June|Sept|September)\b", name, re.I)
+    months = r"(?<![a-z])(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)(?![a-z])"
+    month_match = re.search(months, re.sub(r"^SSC", "", name.replace("_", " "), flags=re.I), re.I)
     if not month_match:
-        month_match = re.search(r"\b(December|October|June|September|February|April)\b", text[:2000], re.I)
+        month_match = re.search(months, text[:2000], re.I)
     return (year_match.group(1) if year_match else "", month_match.group(1) if month_match else "")
 
 
@@ -267,14 +282,26 @@ def section_label(para: str, previous: str) -> str:
     return previous
 
 
-def stock_matches(para: str) -> list[tuple[Stock, str]]:
+def stock_matches(para: str, section: str = "") -> list[tuple[Stock, str]]:
     matches: list[tuple[Stock, str]] = []
+    goa_tanner = bool(re.search(r"(?:GOA|Gulf of Alaska)\s+Tanner\s+crab", f"{section} {para}", re.I))
+    explicit_ebs_tanner = bool(re.search(r"(?:EBS|Bering Sea)\s+Tanner\s+crab", para, re.I))
     for stock in STOCKS:
+        if stock.stock == "EBS Tanner crab" and goa_tanner and not explicit_ebs_tanner:
+            continue
         found: list[str] = []
         for alias in stock.aliases:
             flags = 0 if alias.isupper() else re.I
             if re.search(rf"(?<![A-Za-z]){re.escape(alias)}(?![A-Za-z])", para, flags):
                 found.append(alias)
+        if stock.stock == "GOA Tanner crab (bycatch)" and goa_tanner and re.search(r"Tanner\s+crab", para, re.I):
+            found.append("Tanner crab (GOA section)")
+        if stock.stock == "Aleutian Islands golden king crab" and re.search(r"Pribilof Islands?\s+golden king crab|\bPIGKC\b", para, re.I):
+            if not re.search(r"Aleutian Islands|\bAI\b|\bAIGKC\b", para, re.I):
+                continue
+        if stock.stock == "St. Matthew Island blue king crab" and re.search(r"Pribilof Islands?\s+blue king crab", para, re.I):
+            if not re.search(r"St\.? Matthew|\bSMBKC\b", para, re.I):
+                continue
         if found:
             matches.append((stock, "; ".join(sorted(set(found), key=str.lower))))
     return matches
@@ -465,13 +492,21 @@ def main() -> None:
     rows: list[dict[str, str | int]] = []
     seen: set[tuple[str, str, str, int, str]] = set()
     model_choice_overrides = load_model_choice_overrides()
+    manifest_path = ROOT / "data" / "report_sources.json"
+    manifest = json.loads(manifest_path.read_text()) if manifest_path.exists() else {}
+    sources = {r["source_file"]: r for r in manifest.get("reports", [])}
 
     for pdf in sorted(PDF_DIR.glob("*.pdf")):
+        if pdf.name in EXCLUDED_FILES:
+            continue
         pages, page_blocks = report_pages(pdf)
         whole_text = "\n".join(pages)
         year, month = report_date(pdf.stem, whole_text)
+        source = sources.get(pdf.name, {})
+        year, month = source.get("year", year), source.get("month", month)
         context = ""
         section = ""
+        stock_section = ""
         pdf_url = f"pdfs/{quote(pdf.name)}"
         for idx, block in enumerate(page_blocks, start=1):
             para = str(block["text"])
@@ -483,7 +518,9 @@ def main() -> None:
             )
             context = update_context(para, context)
             section = section_label(para, section)
-            matches = stock_matches(para)
+            if re.match(r"^[A-Z]\d+\b", para):
+                stock_section = para[:140]
+            matches = stock_matches(para, stock_section)
             if not matches:
                 continue
             ctype = comment_type(para)
@@ -518,6 +555,9 @@ def main() -> None:
                         "full_text": para,
                         "pdf_url": pdf_url,
                         "page_url": f"{pdf_url}#page={page}",
+                        "official_report_url": source.get("official_report_url", ""),
+                        "source_provenance": source.get("provenance", "retained local edition"),
+                        "text_method": source.get("text_method", "PDF text"),
                     }
                 )
 
@@ -542,14 +582,20 @@ def main() -> None:
         "full_text",
         "pdf_url",
         "page_url",
+        "official_report_url",
+        "source_provenance",
+        "text_method",
     ]
     with (OUT / "ssc_stock_comments.csv").open("w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer = csv.DictWriter(f, fieldnames=fieldnames, lineterminator="\n")
         writer.writeheader()
         writer.writerows(rows)
 
     payload = {
         "records": rows,
+        "coverage": {key: manifest.get(key) for key in ("checked_on", "archive_url", "since_year")},
+        "reports": manifest.get("reports", []),
+        "import_failures": manifest.get("failures", []),
         "filters": {
             "stocks": sorted({str(r["stock"]) for r in rows}),
             "years": sorted({str(r["year"]) for r in rows if r["year"]}),
@@ -563,6 +609,7 @@ def main() -> None:
         },
     }
     payload_json = json.dumps(payload, ensure_ascii=False)
+    (WEB_ASSETS / "reports.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     (WEB_ASSETS / "comments.json").write_text(payload_json, encoding="utf-8")
     (WEB_ASSETS / "comments-data.js").write_text(
         f"window.SSC_COMMENTS_DATA = {payload_json};\n",
@@ -579,7 +626,7 @@ def main() -> None:
         files[key].add(str(row["source_file"]))
         by_type[key][str(row["comment_type"])] += 1
     with (OUT / "ssc_stock_summary.csv").open("w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=["stock", "fmp", "records", "years", "source_files", "comment_types"])
+        writer = csv.DictWriter(f, fieldnames=["stock", "fmp", "records", "years", "source_files", "comment_types"], lineterminator="\n")
         writer.writeheader()
         for (stock, fmp), count in sorted(counts.items()):
             writer.writerow(
@@ -593,7 +640,8 @@ def main() -> None:
                 }
             )
 
-    print(f"Wrote {len(rows)} comment records from {len(list(PDF_DIR.glob('*.pdf')))} PDFs.")
+    included = [pdf for pdf in PDF_DIR.glob("*.pdf") if pdf.name not in EXCLUDED_FILES]
+    print(f"Wrote {len(rows)} comment records from {len(included)} included PDFs.")
 
 
 if __name__ == "__main__":

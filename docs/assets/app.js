@@ -17,6 +17,7 @@ const els = {
   cards: document.querySelector("#cards"),
   shown: document.querySelector("#shown-count"),
   total: document.querySelector("#record-count"),
+  coverage: document.querySelector("#coverage"),
   clear: document.querySelector("#clear-filters"),
   copy: document.querySelector("#copy-link"),
   template: document.querySelector("#card-template"),
@@ -94,10 +95,12 @@ function applyFilters() {
 
 function sortRecords() {
   const order = els.sort.value;
+  const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  const dateKey = (record) => Number(record.year) * 12 + months.indexOf(record.month);
   state.filtered.sort((a, b) => {
-    if (order === "oldest") return Number(a.year) - Number(b.year) || a.stock.localeCompare(b.stock);
-    if (order === "stock") return a.stock.localeCompare(b.stock) || Number(b.year) - Number(a.year);
-    return Number(b.year) - Number(a.year) || a.stock.localeCompare(b.stock);
+    if (order === "oldest") return dateKey(a) - dateKey(b) || a.stock.localeCompare(b.stock);
+    if (order === "stock") return a.stock.localeCompare(b.stock) || dateKey(b) - dateKey(a);
+    return dateKey(b) - dateKey(a) || a.stock.localeCompare(b.stock);
   });
 }
 
@@ -130,10 +133,17 @@ function render() {
     }
     node.querySelector(".excerpt").textContent = record.excerpt;
     node.querySelector(".full-text").textContent = record.full_text;
-    node.querySelector(".source").textContent = `${record.source_file}, page ${record.page}`;
+    node.querySelector(".source").textContent = `${record.source_file}, page ${record.page}${record.text_method?.startsWith("OCR") ? " (OCR)" : ""}`;
     const link = node.querySelector(".pdf-link");
     link.href = record.page_url;
     link.textContent = `Open page ${record.page}`;
+    const officialLink = node.querySelector(".official-link");
+    if (record.official_report_url) {
+      officialLink.href = record.official_report_url;
+      officialLink.hidden = false;
+      officialLink.title = record.source_provenance === "downloaded"
+        ? "Original NPFMC download" : "Current archive edition; the indexed local PDF may be an earlier edition";
+    }
     fragment.append(node);
   });
 
@@ -167,7 +177,9 @@ function writeUrlState() {
   if (els.modelChoice.checked) params.set("different_model", "1");
   if (els.modelReview.checked) params.set("model_review", "1");
   const next = `${location.pathname}${params.toString() ? `?${params}` : ""}`;
-  history.replaceState(null, "", next);
+  // Some browsers restrict history changes for directly opened local files.
+  if (location.protocol !== "file:") history.replaceState(null, "", next);
+  return new URL(next, location.href).href;
 }
 
 function readUrlState() {
@@ -197,8 +209,8 @@ function clearFilters() {
 }
 
 async function copyStateLink() {
-  writeUrlState();
-  await navigator.clipboard.writeText(location.href);
+  const url = writeUrlState();
+  await navigator.clipboard.writeText(url);
   els.copy.textContent = "Copied";
   window.setTimeout(() => {
     els.copy.textContent = "Copy state";
@@ -209,6 +221,7 @@ async function init() {
   let payload = window.SSC_COMMENTS_DATA;
   if (!payload) {
     const response = await fetch("assets/comments.json");
+    if (!response.ok) throw new Error(`Comments request failed: ${response.status}`);
     payload = await response.json();
   }
   state.records = payload.records;
@@ -217,6 +230,11 @@ async function init() {
   fillSelect(els.fmp, payload.filters.fmps);
   fillSelect(els.type, payload.filters.comment_types);
   els.total.textContent = `${state.records.length.toLocaleString()} indexed comments`;
+  if (payload.reports?.length && els.coverage) {
+    const latest = payload.reports[payload.reports.length - 1];
+    els.coverage.textContent = `${payload.reports.length} reports, through ${latest.month} ${latest.year}. Checked ${payload.coverage.checked_on}.`;
+    if (payload.import_failures?.length) els.coverage.textContent += ` ${payload.import_failures.length} archive downloads unavailable.`;
+  }
   readUrlState();
   applyFilters();
 }

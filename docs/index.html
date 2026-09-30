@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SSC Stock Comments</title>
-  <link rel="stylesheet" href="assets/styles.css">
+  <link rel="stylesheet" href="assets/styles.css?v=20260930">
 </head>
 <body>
   <main class="app-shell">
@@ -12,6 +12,7 @@
       <div class="brand">
         <h1>SSC Stock Comments</h1>
         <p id="record-count">Loading records...</p>
+        <p id="coverage"></p>
       </div>
 
       <label for="stock-filter">Stock</label>
@@ -52,6 +53,7 @@
 
     <section class="results" aria-live="polite">
       <div class="external-link-row">
+        <a href="assets/reports.json" target="_blank" rel="noopener">Report inventory</a>
         <a class="external-link" href="https://jimianelli.github.io/ABC_TAC/" target="_blank" rel="noopener">
           Open ABC/TAC recommendations
         </a>
@@ -90,12 +92,13 @@
       </details>
       <div class="source-row">
         <span class="source"></span>
+        <a class="official-link" target="_blank" rel="noopener" hidden>Official report</a>
         <a class="pdf-link" target="_blank" rel="noopener">Open PDF page</a>
       </div>
     </article>
   </template>
 
-  <script src="assets/comments-data.js"></script>
-  <script src="assets/app.js"></script>
+  <script src="assets/comments-data.js?v=20260930"></script>
+  <script src="assets/app.js?v=20260930"></script>
 </body>
 </html>
