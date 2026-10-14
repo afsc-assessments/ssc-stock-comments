@@ -89,6 +89,7 @@ function applyFilters() {
   });
 
   sortRecords();
+  wordCloud.update(state.filtered);
   render();
   writeUrlState();
 }
@@ -255,5 +256,6 @@ els.copy.addEventListener("click", copyStateLink);
 
 init().catch((error) => {
   els.total.textContent = "Data failed to load";
+  document.querySelector("#word-cloud-summary").textContent = "Word cloud unavailable because the comment data could not be loaded.";
   console.error(error);
 });

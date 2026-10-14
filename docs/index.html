@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SSC Stock Comments</title>
-  <link rel="stylesheet" href="assets/styles.css?v=20260930">
+  <link rel="stylesheet" href="assets/styles.css?v=20261014">
 </head>
 <body>
   <main class="app-shell">
@@ -72,6 +72,20 @@
           </select>
         </label>
       </div>
+      <section class="word-cloud-panel" aria-labelledby="word-cloud-heading">
+        <h2 id="word-cloud-heading">Word cloud for selected comments</h2>
+        <p class="word-cloud-note" id="word-cloud-description">Larger words appear more often. Common connecting words are omitted; each source paragraph counts once.</p>
+        <p class="word-cloud-summary" id="word-cloud-summary" role="status">Loading word cloud...</p>
+        <div id="word-cloud" class="word-cloud"></div>
+        <details id="word-cloud-counts" hidden>
+          <summary>View word counts</summary>
+          <table class="word-count-table">
+            <caption>Most frequent words in the selected source paragraphs</caption>
+            <thead><tr><th scope="col">Word</th><th scope="col">Occurrences</th></tr></thead>
+            <tbody id="word-cloud-table"></tbody>
+          </table>
+        </details>
+      </section>
       <div id="cards" class="cards"></div>
     </section>
   </main>
@@ -99,6 +113,7 @@
   </template>
 
   <script src="assets/comments-data.js?v=20260930"></script>
-  <script src="assets/app.js?v=20260930"></script>
+  <script src="assets/word-cloud.js?v=20261014"></script>
+  <script src="assets/app.js?v=20261014"></script>
 </body>
 </html>

@@ -170,6 +170,71 @@ a:hover {
   padding: 18px 0 40px;
 }
 
+.word-cloud-panel {
+  margin-top: 20px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.word-cloud-panel h2 {
+  margin: 0 0 6px;
+  font-size: 1.15rem;
+}
+
+.word-cloud-note,
+.word-cloud-summary {
+  margin: 6px 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.word-cloud-summary {
+  font-variant-numeric: tabular-nums;
+}
+
+.word-cloud svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.word-cloud text {
+  font-family: Arial, sans-serif;
+  font-weight: 700;
+}
+
+.word-cloud-panel details {
+  margin: 10px 0 0;
+}
+
+.word-count-table {
+  margin-top: 12px;
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.word-count-table caption {
+  text-align: left;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.word-count-table th,
+.word-count-table td {
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+}
+
+.word-count-table td,
+.word-count-table thead th:last-child {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 
 .comment-card {
   border: 1px solid var(--line);
